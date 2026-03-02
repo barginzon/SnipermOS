@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Parkinson's mOS</title>
+    
+    <meta name="theme-color" content="#161616">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2098/2098402.png">
+    <link rel="manifest" href="manifest.json">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        body { background-color: #121212; color: #e5e7eb; font-family: 'Segoe UI', system-ui; -webkit-tap-highlight-color: transparent; }
+        #auth-screen { position: fixed; inset: 0; background-color: #121212; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .auth-card { background-color: #1e1e1e; padding: 2.5rem; border-radius: 1.5rem; border: 1px solid #333; width: 90%; max-width: 400px; text-align: center; }
+        
+        /* ToDo Kartları */
+        .task-card { background-color: #1e1e1e; border-left: 4px solid #3498db; transition: all 0.3s ease; }
+        .urgent-card { border-left-color: #e74c3c; }
+        .completed-card { opacity: 0.6; border-left-color: #2ecc71; }
+        
+        /* Notes Kartları */
+        .note-card { background-color: #1e1e1e; border-top: 1px solid #333; transition: all 0.2s ease; cursor: pointer; }
+        .note-card:active { transform: scale(0.98); background-color: #262626; }
+
+        .category-pill { background-color: #262626; color: #888; cursor: pointer; transition: all 0.2s; }
+        .active-pill { background-color: #3498db !important; color: white !important; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .modal-bg { background-color: rgba(0, 0, 0, 0.9); backdrop-filter: blur(8px); }
+        .strike { text-decoration: line-through; color: #666; }
+        .details-container { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .expanded .details-container { max-height: 1500px; transition: max-height 0.5s ease-in; }
+        
+        /* Senin Sevdiğin Alt Arama Çubuğu Gradienti */
+        #search-action-bar {
+            background: linear-gradient(to top, rgba(18, 18, 18, 1) 20%, rgba(18, 18, 18, 0) 100%);
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen pb-44"> <div id="auth-screen">
+        <div class="auth-card shadow-2xl">
+            <h2 class="text-xl font-bold mb-6 text-blue-500">Sniper Auth</h2>
+            <input type="password" id="pass-input" onkeypress="handleAuthKeyPress(event)" class="w-full bg-[#2c2c2c] border-none rounded-xl p-4 text-center text-xl tracking-widest mb-4 outline-none focus:border-blue-500" placeholder="••••••">
+            <button onclick="checkAuth()" class="w-full py-4 bg-blue-600 text-white rounded-xl font-bold active:scale-95 transition-transform">Giriş Yap</button>
+            <p id="auth-error" class="text-red-500 text-xs mt-3 hidden">Hatalı cevap!</p>
+        </div>
+    </div>
+
+    <header class="p-4 bg-[#161616] border-b border-gray-800 sticky top-0 z-40">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 id="main-header-title" class="text-xl font-bold text-blue-500">Parkinson ToDo</h1>
+                <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Mobile Sniper v5.2</p>
+            </div>
+            <button onclick="fetchData()" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 active:bg-gray-700 transition-colors">
+                <i id="refresh-icon" class="fas fa-sync-alt text-blue-400"></i>
+            </button>
+        </div>
+        <div id="category-filter" class="flex space-x-2 overflow-x-auto py-3 no-scrollbar mt-2 transition-all"></div>
+    </header>
+
+    <main class="p-4 space-y-3 block" id="task-container"></main>
+
+    <main class="p-4 space-y-3 hidden" id="notes-container"></main>
+
+    <div id="search-action-bar" class="fixed left-0 right-0 p-6 z-40 pointer-events-none" style="bottom: 70px;">
+        <div class="flex items-center space-x-3 max-w-lg mx-auto pointer-events-auto">
+            <div class="relative flex-grow">
+                <input type="text" id="search-input" oninput="handleSearch()" 
+                       class="w-full bg-[#1e1e1e] border border-gray-800 text-sm p-4 pr-12 rounded-full outline-none focus:border-blue-500 shadow-2xl" 
+                       placeholder="Görevlerde ara...">
+                <i class="fas fa-search absolute right-5 top-1/2 -translate-y-1/2 text-gray-500"></i>
+            </div>
+            <button onclick="handleSmartAdd()" class="w-14 h-14 bg-green-600 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.5)] flex items-center justify-center text-white text-xl flex-shrink-0 active:scale-95 transition-transform">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+    </div>
+
+    <nav class="fixed bottom-0 left-0 right-0 w-full h-[70px] bg-[#161616] border-t border-gray-800 flex z-50">
+        <div id="nav-indicator" class="absolute top-0 bottom-0 left-0 w-1/2 bg-blue-500/10 border-t-2 border-blue-500 transition-transform duration-300 ease-in-out pointer-events-none"></div>
+        
+        <button onclick="switchTab('todo')" class="flex-1 flex flex-col items-center justify-center relative z-10 outline-none">
+            <i id="icon-todo" class="fas fa-check-square text-2xl mb-1 text-[#3498db] transition-colors"></i>
+            <span id="text-todo" class="text-[10px] font-bold uppercase tracking-wider text-white transition-colors">ToDo</span>
+        </button>
+        
+        <button onclick="switchTab('notes')" class="flex-1 flex flex-col items-center justify-center relative z-10 outline-none">
+            <i id="icon-notes" class="fas fa-book text-2xl mb-1 text-gray-500 transition-colors"></i>
+            <span id="text-notes" class="text-[10px] font-bold uppercase tracking-wider text-gray-500 transition-colors">Notlar</span>
+        </button>
+    </nav>
+
+    <div id="task-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+        <div class="bg-[#1e1e1e] w-full max-w-lg rounded-t-3xl sm:rounded-2xl p-6 border border-gray-800">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold">Yeni Plan</h2>
+                <button onclick="closeModal('task-modal')" class="text-gray-500 text-3xl outline-none">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="new-title" class="w-full bg-[#2c2c2c] border border-gray-800 rounded-xl p-4 outline-none focus:border-blue-500" placeholder="Görev başlığı...">
+                <div class="grid grid-cols-2 gap-3">
+                    <input type="datetime-local" id="new-deadline" class="w-full bg-[#2c2c2c] border border-gray-800 rounded-xl p-4 text-sm outline-none text-gray-300">
+                    
+                    <div class="flex space-x-2">
+                        <select id="new-category" class="flex-grow bg-[#2c2c2c] border border-gray-800 rounded-xl px-2 text-sm outline-none text-gray-300"></select>
+                        <button onclick="addNewCategory()" class="bg-[#2c2c2c] border border-gray-800 px-4 rounded-xl text-blue-500 active:bg-gray-800 transition-colors">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+
+                </div>
+                <div class="flex items-center justify-between p-3 bg-[#262626] rounded-xl border border-gray-800">
+                    <span class="font-bold text-red-500 text-sm"><i class="fas fa-fire mr-2"></i>Acil Durum</span>
+                    <input type="checkbox" id="new-urgent" class="w-6 h-6 rounded bg-gray-700 border-none outline-none">
+                </div>
+                <button onclick="saveTask()" class="w-full py-5 bg-blue-600 text-white rounded-2xl font-bold text-lg active:scale-95 transition-transform">Görevi Oluştur</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="note-modal" class="fixed inset-0 modal-bg z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+        <div class="bg-[#1e1e1e] w-full h-[90vh] max-w-lg rounded-t-3xl sm:rounded-2xl p-6 border border-gray-800 flex flex-col">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h2 class="text-xl font-bold text-blue-500" id="note-modal-title">Yeni Not</h2>
+                <button onclick="closeModal('note-modal')" class="text-gray-500 text-3xl outline-none">&times;</button>
+            </div>
+            <div class="space-y-3 overflow-y-auto no-scrollbar flex-grow pb-4 flex flex-col">
+                <input type="hidden" id="note-id">
+                <input type="text" id="note-title" class="w-full bg-[#2c2c2c] border border-gray-800 rounded-xl p-4 outline-none focus:border-blue-500 text-white font-bold" placeholder="Not Başlığı...">
+                <input type="text" id="note-category" class="w-full bg-[#2c2c2c] border border-gray-800 rounded-xl p-3 text-sm outline-none focus:border-blue-500 text-gray-400" placeholder="#etiketler...">
+                <textarea id="note-content" class="w-full flex-grow bg-[#2c2c2c] border border-gray-800 rounded-xl p-4 outline-none focus:border-blue-500 text-sm leading-relaxed text-gray-300 font-mono resize-none" placeholder="Not içeriği buraya..."></textarea>
+            </div>
+            <div class="flex space-x-3 shrink-0 mt-2">
+                <button id="btn-delete-note" onclick="deleteNote()" class="hidden py-4 px-5 bg-red-900/30 text-red-500 rounded-xl font-bold border border-red-900/50 active:scale-95 transition-transform">
+                    <i class="fas fa-trash"></i>
+                </button>
+                <button onclick="saveNote()" class="flex-grow py-4 bg-blue-600 text-white rounded-xl font-bold text-lg active:scale-95 transition-transform">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // SERVICE WORKER KAYDI
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(() => console.log('SW: Hazır'));
+            });
+        }
+
+        const SUPABASE_URL = "https://pplwiflvdzcjiclpqpkj.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_bRfLSdOtMi2Cz3DiSBRHmQ_w6qQeOli"; 
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentTab = 'todo'; // 'todo' veya 'notes'
+        let allTasks = [];
+        let allNotes = [];
+        let categories = [];
+        let selectedCategoryId = 'fixed-all';
+        let expandedTaskId = null;
+
+        // EKRAN YÜKLENDİĞİNDE
+        window.onload = () => {
+            if (localStorage.getItem('parkinson_auth') === 'true') {
+                document.getElementById('auth-screen').style.display = 'none';
+                fetchData();
+            }
+        };
+
+        // KULLANICI DOSTU: Enter tuşuna basınca Giriş yapması için
+        function handleAuthKeyPress(event) {
+            if (event.key === "Enter") {
+                checkAuth();
+            }
+        }
+
+        function checkAuth() {
+            const passInput = document.getElementById('pass-input').value;
+            if (passInput === "101565") {
+                localStorage.setItem('parkinson_auth', 'true');
+                document.getElementById('auth-screen').style.display = 'none';
+                fetchData();
+            } else {
+                document.getElementById('auth-error').classList.remove('hidden');
+            }
+        }
+
+        // --- SEKME (TAB) YÖNETİMİ ---
+        function switchTab(tab) {
+            currentTab = tab;
+            const indicator = document.getElementById('nav-indicator');
+            const searchInput = document.getElementById('search-input');
+            const title = document.getElementById('main-header-title');
+            
+            if (tab === 'todo') {
+                indicator.style.transform = 'translateX(0)';
+                document.getElementById('icon-todo').classList.add('text-[#3498db]');
+                document.getElementById('icon-todo').classList.remove('text-gray-500');
+                document.getElementById('text-todo').classList.add('text-white');
+                document.getElementById('text-todo').classList.remove('text-gray-500');
+                
+                document.getElementById('icon-notes').classList.remove('text-[#3498db]');
+                document.getElementById('icon-notes').classList.add('text-gray-500');
+                document.getElementById('text-notes').classList.remove('text-white');
+                document.getElementById('text-notes').classList.add('text-gray-500');
+                
+                document.getElementById('task-container').classList.remove('hidden');
+                document.getElementById('category-filter').classList.remove('hidden');
+                document.getElementById('notes-container').classList.add('hidden');
+                
+                title.innerText = "Parkinson ToDo";
+                searchInput.placeholder = "Görevlerde ara...";
+                searchInput.value = ''; // Sekme değişince aramayı temizle
+                renderTasks();
+            } else {
+                indicator.style.transform = 'translateX(100%)';
+                document.getElementById('icon-notes').classList.add('text-[#3498db]');
+                document.getElementById('icon-notes').classList.remove('text-gray-500');
+                document.getElementById('text-notes').classList.add('text-white');
+                document.getElementById('text-notes').classList.remove('text-gray-500');
+                
+                document.getElementById('icon-todo').classList.remove('text-[#3498db]');
+                document.getElementById('icon-todo').classList.add('text-gray-500');
+                document.getElementById('text-todo').classList.remove('text-white');
+                document.getElementById('text-todo').classList.add('text-gray-500');
+                
+                document.getElementById('notes-container').classList.remove('hidden');
+                document.getElementById('task-container').classList.add('hidden');
+                document.getElementById('category-filter').classList.add('hidden');
+                
+                title.innerText = "Sniper Notes";
+                searchInput.placeholder = "Notlarda ara...";
+                searchInput.value = ''; // Sekme değişince aramayı temizle
+                renderNotes();
+            }
+        }
+
+        // AKILLI (+) BUTONU YÖNETİCİSİ
+        function handleSmartAdd() {
+            if(currentTab === 'todo') {
+                openModal('task-modal');
+            } else {
+                openNoteModal(); // İçi boş yeni not açar
+            }
+        }
+
+        function handleSearch() {
+            if(currentTab === 'todo') {
+                renderTasks();
+            } else {
+                renderNotes();
+            }
+        }
+
+        // VERİLERİ SUPABASE'DEN ÇEKME (TAM AÇIK YAZIM)
+        async function fetchData() {
+            const icon = document.getElementById('refresh-icon');
+            if(icon) {
+                icon.classList.add('fa-spin');
+            }
+            try {
+                // ToDo Kategorileri
+                const responseCats = await _supabase.from('categories').select('*');
+                if (responseCats.data) {
+                    categories = responseCats.data;
+                }
+                renderCategories();
+                
+                // ToDo Görevleri
+                const responseTasks = await _supabase.from('tasks').select('*, subtasks(*)');
+                if (responseTasks.data) {
+                    allTasks = responseTasks.data;
+                }
+                if (currentTab === 'todo') renderTasks();
+
+                // Notları Çek
+                const responseNotes = await _supabase.from('sniper_notes').select('*').order('id', {ascending: false});
+                if (responseNotes.data) {
+                    allNotes = responseNotes.data;
+                }
+                if (currentTab === 'notes') renderNotes();
+
+            } catch (error) {
+                console.error("Veri çekme sırasında hata:", error);
+            } finally {
+                if(icon) {
+                    icon.classList.remove('fa-spin');
+                }
+            }
+        }
+
+        // --- TODO MODÜLÜ (UZUN VE TEMİZ YAZIM) ---
+        function renderCategories() {
+            const container = document.getElementById('category-filter');
+            const select = document.getElementById('new-category');
+            
+            let html = ''; 
+            let options = '';
+            
+            categories.forEach(cat => {
+                const isActive = (selectedCategoryId === String(cat.id));
+                const activeClass = isActive ? 'active-pill' : '';
+                html += `<button onclick="filterTasks('${cat.id}')" class="category-pill px-5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider ${activeClass}">${cat.name}</button>`;
+                options += `<option value="${cat.id}">${cat.name}</option>`;
+            });
+            
+            if (container) container.innerHTML = html;
+            if (select) select.innerHTML = options;
+        }
+
+        async function addNewCategory() {
+            const catName = prompt("Yeni kategori adı girin:");
+            if (!catName || !catName.trim()) return;
+            
+            const response = await _supabase.from('categories').insert([{ name: catName.trim() }]).select();
+            
+            if (response.data && response.data.length > 0) {
+                categories.push(response.data[0]);
+                selectedCategoryId = String(response.data[0].id);
+                renderCategories();
+                renderTasks();
+            } else {
+                alert("Kategori eklenirken bir hata oluştu.");
+            }
+        }
+
+        function filterTasks(id) { 
+            selectedCategoryId = String(id); 
+            renderCategories(); 
+            renderTasks(); 
+        }
+
+        function toggleExpansion(taskId) { 
+            if (expandedTaskId === String(taskId)) {
+                expandedTaskId = null;
+            } else {
+                expandedTaskId = String(taskId);
+            }
+            renderTasks(); 
+        }
+
+        function renderTasks() {
+            const container = document.getElementById('task-container');
+            const searchInput = document.getElementById('search-input');
+            const searchVal = searchInput ? searchInput.value.toLowerCase() : '';
+            
+            container.innerHTML = '';
+            
+            let filtered = [];
+            if (selectedCategoryId === 'fixed-all') {
+                filtered = allTasks;
+            } else {
+                filtered = allTasks.filter(t => String(t.category_id) === String(selectedCategoryId));
+            }
+            
+            if (searchVal !== '') {
+                filtered = filtered.filter(t => t.title.toLowerCase().includes(searchVal));
+            }
+            
+            filtered.sort((a, b) => {
+                if (a.status !== b.status) {
+                    return a.status - b.status;
+                }
+
+                if (a.urgent !== b.urgent) {
+                    return b.urgent - a.urgent;
+                }
+
+                return b.id - a.id;
+            });
+
+            filtered.forEach(task => {
+                const isExpanded = (expandedTaskId === String(task.id));
+                const urgentClass = task.urgent ? 'urgent-card' : '';
+                const completedClass = task.status ? 'completed-card' : '';
+                const expandedClass = isExpanded ? 'expanded' : '';
+                
+                const card = document.createElement('div');
+                card.className = `task-card rounded-2xl shadow-lg border border-gray-800/50 mb-3 ${urgentClass} ${completedClass} ${expandedClass}`;
+                
+                let subHtml = '';
+                const subs = task.subtasks || [];
+                subs.forEach(st => {
+                    const iconClass = st.done ? 'fa-check-square text-green-500' : 'fa-square text-gray-500';
+                    const strikeClass = st.done ? 'strike' : '';
+                    subHtml += `
+                        <div class="flex items-center p-3 border-b border-gray-800/30" onclick="toggleSub(event, '${st.id}', ${st.done})">
+                            <i class="far ${iconClass} mr-3 text-lg"></i>
+                            <span class="text-sm text-gray-300 ${strikeClass}">${st.title}</span>
+                        </div>`;
+                });
+                
+                const urgentBadge = task.urgent ? '<span class="text-[8px] bg-red-900/50 text-red-400 px-2 py-0.5 rounded font-black uppercase">Acil</span>' : '';
+                const catName = task.category_name || 'Genel';
+                const titleStrike = task.status ? 'strike' : '';
+                const chevron = isExpanded ? 'fa-chevron-up' : 'fa-chevron-down';
+                const noSubHtml = '<p class="text-gray-600 text-xs py-2 text-center uppercase font-bold opacity-50">Alt görev yok</p>';
+                
+                const btnColor = task.status ? 'bg-orange-900/30 text-orange-500 border border-orange-900/50' : 'bg-green-600 text-white active:bg-green-700';
+                const btnText = task.status ? 'PLANI GERİ AL' : 'GÖREVİ TAMAMLA';
+
+                card.innerHTML = `
+                    <div class="p-4 flex justify-between items-center" onclick="toggleExpansion('${task.id}')">
+                        <div class="flex-grow">
+                            <div class="flex items-center space-x-2 mb-1">
+                                ${urgentBadge}
+                                <span class="text-[9px] text-blue-400 font-bold uppercase">${catName}</span>
+                            </div>
+                            <h3 class="font-bold text-base text-gray-200 ${titleStrike}">${task.title}</h3>
+                        </div>
+                        <i class="fas ${chevron} text-gray-600"></i>
+                    </div>
+                    <div class="details-container px-4 pb-4">
+                        <div class="border-t border-gray-800 pt-2">
+                            ${subHtml !== '' ? subHtml : noSubHtml}
+                            <div class="flex mt-3 space-x-2" onclick="event.stopPropagation()">
+                                <input type="text" id="sub-input-${task.id}" class="flex-grow bg-[#2c2c2c] border-none rounded-lg p-3 text-sm outline-none text-white focus:border-blue-500" placeholder="Yeni alt görev...">
+                                <button onclick="addSubTask(event, '${task.id}')" class="bg-blue-600 px-4 py-2 rounded-lg text-white active:bg-blue-700 transition-colors">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <button onclick="toggleT(event, '${task.id}', ${task.status})" class="w-full py-4 rounded-xl font-bold mt-4 ${btnColor} transition-colors">
+                                ${btnText}
+                            </button>
+                        </div>
+                    </div>`;
+                
+                container.appendChild(card);
+            });
+        }
+
+        async function toggleT(e, id, currentStatus) { 
+            e.stopPropagation(); 
+            await _supabase.from('tasks').update({status: !currentStatus}).eq('id', id); 
+            fetchData(); 
+        }
+
+        async function toggleSub(e, id, currentDone) { 
+            e.stopPropagation(); 
+            await _supabase.from('subtasks').update({done: !currentDone}).eq('id', id); 
+            fetchData(); 
+        }
+
+        async function addSubTask(e, taskId) { 
+            e.stopPropagation(); 
+            const input = document.getElementById(`sub-input-${taskId}`); 
+            const title = input.value.trim(); 
+            if(!title) return; 
+            
+            // Sniper: Hem alt göreve benzersiz ID verdik hem de task_id'yi sayıya zorladık
+            await _supabase.from('subtasks').insert([{
+                id: Math.floor(Date.now() / 1000 + Math.random()), 
+                task_id: (taskId),
+                title: title, 
+                done: false
+            }]); 
+            input.value = ''; 
+            fetchData(); 
+        }
+
+        async function saveTask() { 
+            const titleInput = document.getElementById('new-title');
+            const title = titleInput.value.trim(); 
+            const deadline = document.getElementById('new-deadline').value; 
+            const catId = document.getElementById('new-category').value; 
+            const urgent = document.getElementById('new-urgent').checked; 
+            
+            if(!title) {
+                alert("Görev başlığı boş olamaz.");
+                return;
+            }
+
+            let catName = 'Genel';
+            const foundCat = categories.find(c => String(c.id) === String(catId));
+            if (foundCat) catName = foundCat.name;
+            
+            const taskId = Math.floor(Date.now() / 1000);
+
+            const payload = {
+                id: taskId,
+                title: title, 
+                notes: "", 
+                deadline: deadline || "", 
+                created_at: new Date().toLocaleString('tr-TR'), 
+                category_id: catId,
+                category_name: catName, 
+                status: false, 
+                urgent: urgent, 
+                alarms: [false,false,false,false], 
+                fired_alarms: [false,false,false,false,false]
+            };
+
+            const { error } = await _supabase.from('tasks').insert([payload]); 
+
+            if (error) {
+                console.error("Hata:", error);
+                alert("Kaydedilemedi: " + error.message);
+                return;
+            }
+            
+            titleInput.value = '';
+            document.getElementById('new-urgent').checked = false;
+            document.getElementById('new-deadline').value = '';
+            
+            closeModal('task-modal'); 
+            fetchData(); 
+        }
+
+        // --- YENİ: NOTLAR MODÜLÜ (UZUN VE TEMİZ YAZIM) ---
+        function renderNotes() {
+            const container = document.getElementById('notes-container');
+            const searchInput = document.getElementById('search-input');
+            const searchVal = searchInput ? searchInput.value.toLowerCase() : '';
+            
+            container.innerHTML = '';
+            
+            let filtered = allNotes;
+            if (searchVal !== '') {
+                filtered = filtered.filter(n => {
+                    const nameMatch = n.name && n.name.toLowerCase().includes(searchVal);
+                    const contentMatch = n.content && n.content.toLowerCase().includes(searchVal);
+                    const catMatch = n.category && n.category.toLowerCase().includes(searchVal);
+                    return nameMatch || contentMatch || catMatch;
+                });
+            }
+            
+            filtered.forEach(note => {
+                const card = document.createElement('div');
+                card.className = "note-card rounded-2xl p-5 shadow-lg flex flex-col gap-2 mb-3";
+                card.onclick = () => openNoteModal(note);
+                
+                let excerpt = '<span class="italic opacity-50">İçerik yok...</span>';
+                if (note.content) {
+                    excerpt = note.content.substring(0, 100);
+                    if (note.content.length > 100) excerpt += '...';
+                }
+                
+                const tagHtml = note.category ? `<span class="text-[10px] bg-[#222] text-gray-400 px-2 py-1 rounded font-bold mt-2 self-start">${note.category}</span>` : '';
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <h3 class="font-bold text-[#9b59b6] text-lg">${note.name || 'İsimsiz Not'}</h3>
+                    </div>
+                    <p class="text-sm text-gray-400 font-mono line-clamp-2 leading-relaxed mt-1">${excerpt}</p>
+                    ${tagHtml}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function openNoteModal(note = null) {
+            const modal = document.getElementById('note-modal');
+            const btnDelete = document.getElementById('btn-delete-note');
+            
+            if (note && note.id) {
+                // Notu Düzenleme Modu
+                document.getElementById('note-modal-title').innerText = "Notu Düzenle";
+                document.getElementById('note-id').value = note.id;
+                document.getElementById('note-title').value = note.name || '';
+                document.getElementById('note-category').value = note.category || '';
+                document.getElementById('note-content').value = note.content || '';
+                btnDelete.classList.remove('hidden');
+            } else {
+                // Yeni Not Modu
+                document.getElementById('note-modal-title').innerText = "Yeni Not";
+                document.getElementById('note-id').value = '';
+                document.getElementById('note-title').value = '';
+                document.getElementById('note-category').value = '';
+                document.getElementById('note-content').value = '';
+                btnDelete.classList.add('hidden');
+            }
+            modal.classList.remove('hidden');
+        }
+
+        async function saveNote() {
+            const id = document.getElementById('note-id').value;
+            const name = document.getElementById('note-title').value.trim();
+            const category = document.getElementById('note-category').value.trim();
+            const content = document.getElementById('note-content').value;
+            
+            if (!name) {
+                alert("Lütfen notunuza bir başlık verin.");
+                return;
+            }
+
+            const payload = { 
+                name: name, 
+                category: category, 
+                content: content 
+            };
+
+            if (id) {
+                await _supabase.from('sniper_notes').update(payload).eq('id', id);
+            } else {
+                await _supabase.from('sniper_notes').insert([payload]);
+            }
+
+            closeModal('note-modal');
+            fetchData();
+        }
+
+        async function deleteNote() {
+            const id = document.getElementById('note-id').value;
+            if (!id) return;
+
+            const isConfirmed = confirm("Bu notu silmek istediğine emin misin?");
+            if (isConfirmed) {
+                await _supabase.from('sniper_notes').delete().eq('id', id);
+                closeModal('note-modal');
+                fetchData();
+            }
+        }
+
+        // ORTAK YARDIMCI FONKSİYONLAR
+        function openModal(modalId) { 
+            document.getElementById(modalId).classList.remove('hidden'); 
+        }
+        
+        function closeModal(modalId) { 
+            document.getElementById(modalId).classList.add('hidden'); 
+        }
+
+    </script>
+
+    <script src="notifications.js"></script>
+
+    <button id="notification-btn" 
+            onclick="subscribeUserToPush()" 
+            class="fixed bottom-24 right-6 w-12 h-12 bg-gray-800 border border-gray-700 rounded-full flex items-center justify-center text-blue-500 shadow-2xl active:scale-90 transition-transform z-50">
+        <i class="fas fa-bell"></i>
+    </button>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "Parkinson Planner",
+  "short_name": "Parkinson",
+  "description": "Bulut tabanlı, akıllı görev yöneticisi.",
+  "start_url": "index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121212",
+  "theme_color": "#161616",
+  "icons": [
+    {
+      "src": "app_icon192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "app_icon512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
