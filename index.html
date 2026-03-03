@@ -68,6 +68,9 @@
     <main class="p-4 space-y-3 block" id="task-container"></main>
 
     <main class="p-4 space-y-3 hidden" id="notes-container"></main>
+    <main class="p-0 hidden h-full" id="chat-container">
+        <iframe src="chat.html" class="w-full h-full border-none" style="min-height: calc(100vh - 140px);"></iframe>
+    </main>
 
     <div id="search-action-bar" class="fixed left-0 right-0 p-6 z-40 pointer-events-none" style="bottom: 70px;">
         <div class="flex items-center space-x-3 max-w-lg mx-auto pointer-events-auto">
@@ -84,7 +87,7 @@
     </div>
 
     <nav class="fixed bottom-0 left-0 right-0 w-full h-[70px] bg-[#161616] border-t border-gray-800 flex z-50">
-        <div id="nav-indicator" class="absolute top-0 bottom-0 left-0 w-1/2 bg-blue-500/10 border-t-2 border-blue-500 transition-transform duration-300 ease-in-out pointer-events-none"></div>
+        <div id="nav-indicator" class="absolute top-0 bottom-0 left-0 w-1/3 bg-blue-500/10 border-t-2 border-blue-500 transition-transform duration-300 ease-in-out pointer-events-none"></div>
         
         <button onclick="switchTab('todo')" class="flex-1 flex flex-col items-center justify-center relative z-10 outline-none">
             <i id="icon-todo" class="fas fa-check-square text-2xl mb-1 text-[#3498db] transition-colors"></i>
@@ -94,6 +97,11 @@
         <button onclick="switchTab('notes')" class="flex-1 flex flex-col items-center justify-center relative z-10 outline-none">
             <i id="icon-notes" class="fas fa-book text-2xl mb-1 text-gray-500 transition-colors"></i>
             <span id="text-notes" class="text-[10px] font-bold uppercase tracking-wider text-gray-500 transition-colors">Notlar</span>
+        </button>
+        
+        <button onclick="switchTab('chat')" class="flex-1 flex flex-col items-center justify-center relative z-10 outline-none">
+            <i id="icon-chat" class="fas fa-comment-dots text-2xl mb-1 text-gray-500 transition-colors"></i>
+            <span id="text-chat" class="text-[10px] font-bold uppercase tracking-wider text-gray-500">Chat</span>
         </button>
     </nav>
 
@@ -197,48 +205,43 @@
             const indicator = document.getElementById('nav-indicator');
             const searchInput = document.getElementById('search-input');
             const title = document.getElementById('main-header-title');
+            const searchBar = document.getElementById('search-action-bar');
             
+            // Önce her şeyi gizle ve renkleri sıfırla
+            document.getElementById('task-container').classList.add('hidden');
+            document.getElementById('notes-container').classList.add('hidden');
+            document.getElementById('chat-container').classList.add('hidden');
+            document.getElementById('category-filter').classList.add('hidden');
+            searchBar.classList.add('hidden');
+
+            const icons = ['todo', 'notes', 'chat'];
+            icons.forEach(i => {
+                document.getElementById('icon-' + i).classList.replace('text-[#3498db]', 'text-gray-500');
+                document.getElementById('text-' + i).classList.replace('text-white', 'text-gray-500');
+            });
+
+            // Seçilen sekmeyi aktif et
+            document.getElementById(tab + '-container').classList.remove('hidden');
+            document.getElementById('icon-' + tab).classList.replace('text-gray-500', 'text-[#3498db]');
+            document.getElementById('text-' + tab).classList.replace('text-gray-500', 'text-white');
+
             if (tab === 'todo') {
                 indicator.style.transform = 'translateX(0)';
-                document.getElementById('icon-todo').classList.add('text-[#3498db]');
-                document.getElementById('icon-todo').classList.remove('text-gray-500');
-                document.getElementById('text-todo').classList.add('text-white');
-                document.getElementById('text-todo').classList.remove('text-gray-500');
-                
-                document.getElementById('icon-notes').classList.remove('text-[#3498db]');
-                document.getElementById('icon-notes').classList.add('text-gray-500');
-                document.getElementById('text-notes').classList.remove('text-white');
-                document.getElementById('text-notes').classList.add('text-gray-500');
-                
-                document.getElementById('task-container').classList.remove('hidden');
                 document.getElementById('category-filter').classList.remove('hidden');
-                document.getElementById('notes-container').classList.add('hidden');
-                
+                searchBar.classList.remove('hidden');
                 title.innerText = "Parkinson ToDo";
-                searchInput.placeholder = "Görevlerde ara...";
-                searchInput.value = ''; // Sekme değişince aramayı temizle
                 renderTasks();
-            } else {
+            } else if (tab === 'notes') {
                 indicator.style.transform = 'translateX(100%)';
-                document.getElementById('icon-notes').classList.add('text-[#3498db]');
-                document.getElementById('icon-notes').classList.remove('text-gray-500');
-                document.getElementById('text-notes').classList.add('text-white');
-                document.getElementById('text-notes').classList.remove('text-gray-500');
-                
-                document.getElementById('icon-todo').classList.remove('text-[#3498db]');
-                document.getElementById('icon-todo').classList.add('text-gray-500');
-                document.getElementById('text-todo').classList.remove('text-white');
-                document.getElementById('text-todo').classList.add('text-gray-500');
-                
-                document.getElementById('notes-container').classList.remove('hidden');
-                document.getElementById('task-container').classList.add('hidden');
-                document.getElementById('category-filter').classList.add('hidden');
-                
+                searchBar.classList.remove('hidden');
                 title.innerText = "Sniper Notes";
-                searchInput.placeholder = "Notlarda ara...";
-                searchInput.value = ''; // Sekme değişince aramayı temizle
                 renderNotes();
+            } else if (tab === 'chat') {
+                indicator.style.transform = 'translateX(200%)';
+                title.innerText = "Secret Chat";
             }
+            
+            if(searchInput) searchInput.value = '';
         }
 
         // AKILLI (+) BUTONU YÖNETİCİSİ
