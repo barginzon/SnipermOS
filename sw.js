@@ -1,4 +1,4 @@
-// Parkinson Planner - Service Worker (v109) - Sniper Edit
+// Parkinson Planner - Service Worker (v110) - Sniper Edit
 const CACHE_NAME = 'parkinson-v109';
 
 // Önbelleğe alınacak dosyalar
