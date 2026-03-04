@@ -221,10 +221,15 @@
             });
 
             // Seçilen sekmeyi aktif et
-            document.getElementById(tab + '-container').classList.remove('hidden');
+            if (tab === 'todo') {
+                document.getElementById('task-container').classList.remove('hidden');
+            } else {
+                document.getElementById(tab + '-container').classList.remove('hidden');
+            }
+            
             document.getElementById('icon-' + tab).classList.replace('text-gray-500', 'text-[#3498db]');
             document.getElementById('text-' + tab).classList.replace('text-gray-500', 'text-white');
-
+            
             if (tab === 'todo') {
                 indicator.style.transform = 'translateX(0)';
                 document.getElementById('category-filter').classList.remove('hidden');
